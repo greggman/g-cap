@@ -1,0 +1,52 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app || true
+
+      - name: Build
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            export VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          UNIVERSAL=1 ./build.sh
+
+      - name: Package
+        run: |
+          ditto -c -k --keepParent build/G-Cap.app G-Cap.zip
+          lipo -info build/G-Cap.app/Contents/MacOS/GCap
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: G-Cap
+          path: G-Cap.zip
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" G-Cap.zip \
+            --title "G-Cap $GITHUB_REF_NAME" \
+            --notes "Unsigned build. After unzipping, run:
+
+          \`\`\`
+          xattr -dr com.apple.quarantine /path/to/G-Cap.app
+          \`\`\`
+
+          or right-click the app and choose Open the first time."
