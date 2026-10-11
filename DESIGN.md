@@ -20,8 +20,10 @@ ScreenCaptureKit.
   serial queue, to `Recorder`.
 - `Recorder` writes a `.mov` with `AVAssetWriter`: one video track, plus
   separate tracks for system audio and the microphone.
-- `RegionSelector` shows a dimmed overlay on every screen for dragging out a
-  region; `RegionOutline` draws a red frame around it while recording. G-Cap's
+- `RegionEditor` shows a dimmed overlay on every screen with an editable
+  rectangle (move, resize from edges/corners, aspect lock, exact pixel size,
+  presets) and a floating panel; the region and aspect are remembered.
+  While recording, `RegionOutline` draws a red frame around the region. G-Cap's
   own windows are excluded from capture, so neither appears in the video.
 - `AppState` holds the UI state and builds the `SCContentFilter` /
   `SCStreamConfiguration`.

@@ -28,7 +28,7 @@ open build/G-Cap.app
 
 ## Usage
 
-- Choose **Screen**, **Window** or **Region** (Region → *Select…*, then drag; Esc cancels).
+- Choose **Screen**, **Window** or **Region** (Region → *Select…* / *Edit…*: drag the middle to move, edges or corners to resize, or drag on empty space to draw a new one; type an exact pixel size, lock an aspect ratio, or pick a preset; arrows nudge, Return or Done accepts, Esc cancels, Record starts right away).
 - Toggle system audio / microphone. When both are on they are saved as separate audio tracks.
 - Click **Record** (or ⇧⌘R). Stop from the window, ⇧⌘R, or the menu bar icon.
 - Recordings go to `~/Movies/G-Cap` by default.

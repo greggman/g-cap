@@ -17,7 +17,9 @@ final class AppState: ObservableObject {
     @Published private(set) var windows: [SCWindow] = []
     @Published var selectedDisplayID: CGDirectDisplayID?
     @Published var selectedWindowID: CGWindowID?
-    @Published var region: ScreenRegion?
+    @Published var region: ScreenRegion? {
+        didSet { UserDefaults.standard.set(try? JSONEncoder().encode(region), forKey: "region") }
+    }
 
     // Audio
     @Published var captureSystemAudio = true
@@ -43,7 +45,7 @@ final class AppState: ObservableObject {
 
     private var content: SCShareableContent?
     private let engine = CaptureEngine()
-    private let regionSelector = RegionSelector()
+    private let regionEditor = RegionEditor()
     private let regionOutline = RegionOutline()
 
     init() {
@@ -51,6 +53,7 @@ final class AppState: ObservableObject {
             ?? FileManager.default.homeDirectoryForCurrentUser
         let saved = UserDefaults.standard.url(forKey: "outputFolder")
         outputFolder = saved ?? movies.appendingPathComponent("G-Cap", isDirectory: true)
+        region = UserDefaults.standard.data(forKey: "region").flatMap { try? JSONDecoder().decode(ScreenRegion.self, from: $0) }
         engine.onUnexpectedStop = { [weak self] error in
             guard let self, self.isRecording else { return }
             Task { await self.stopRecording(reason: error) }
@@ -116,22 +119,28 @@ final class AppState: ObservableObject {
         return "\(app) — \(title)"
     }
 
-    func selectRegion() {
-        regionSelector.begin { [weak self] region in
+    func editRegion() {
+        regionEditor.begin(initial: region) { [weak self] result in
             guard let self else { return }
-            if let region {
+            switch result {
+            case .cancel:
+                NSApp.activate(ignoringOtherApps: true)
+            case .done(let region):
                 self.region = region
                 self.sourceKind = .region
+                NSApp.activate(ignoringOtherApps: true)
+            case .record(let region):
+                self.region = region
+                self.sourceKind = .region
+                Task { await self.startRecording() }
             }
-            NSApp.activate(ignoringOtherApps: true)
         }
     }
 
     var regionDescription: String {
-        guard let region else { return "No region selected" }
-        let r = region.rect
-        let screen = NSScreen.screens.first(where: { $0.displayID == region.displayID })
-        return "\(Int(r.width)) × \(Int(r.height)) at (\(Int(r.minX)), \(Int(r.minY))) on \(screen?.localizedName ?? "display")"
+        guard let region, let screen = NSScreen.withDisplayID(region.displayID) else { return "No region selected" }
+        let r = region.rect, scale = screen.backingScaleFactor
+        return "\(Int(r.width * scale)) × \(Int(r.height * scale)) px on \(screen.localizedName)"
     }
 
     // MARK: Recording

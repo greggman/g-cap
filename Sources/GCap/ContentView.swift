@@ -58,7 +58,7 @@ struct ContentView: View {
                     HStack {
                         Text(state.regionDescription)
                             .foregroundStyle(.secondary)
-                        Button("Select…") { state.selectRegion() }
+                        Button(state.region == nil ? "Select…" : "Edit…") { state.editRegion() }
                     }
                 }
             }
