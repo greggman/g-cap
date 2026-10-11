@@ -1,3 +1,5 @@
+<img src="Resources/AppIcon.png" width="128" alt="G-Cap icon">
+
 # G-Cap
 
 A native macOS screen recorder. Records a screen, a window, or a region, with
@@ -25,6 +27,9 @@ permission if you enable the mic). After granting Screen Recording, relaunch.
 ./build.sh   # builds build/G-Cap.app
 open build/G-Cap.app
 ```
+
+The icon is drawn by `tools/make-icon.swift`; regenerate it with
+`swift tools/make-icon.swift Resources/AppIcon.icns`.
 
 ## Usage
 
