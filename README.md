@@ -36,3 +36,6 @@ open build/G-Cap.app
 
 Pushing a tag like `v0.1.0` makes GitHub Actions build the app and
 attach `G-Cap.zip` to a GitHub release.
+
+## License: [MIT](LICENSE.md)
+
