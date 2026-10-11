@@ -8,6 +8,15 @@ WebM with little control over quality. Native gives hardware HEVC/H.264 at a
 chosen bitrate, or ProRes, plus system and microphone audio directly from
 ScreenCaptureKit.
 
+Note: You can download from [Releases] but you will need to remove the quarantine
+because the build is unsigned/un-notarized.
+
+```sh
+xattr -dr com.apple.quarantine <path-to.app>
+```
+
+Or you can download and build yourself.
+
 ## Requirements
 
 1. Capture video and audio (system audio and/or microphone).
