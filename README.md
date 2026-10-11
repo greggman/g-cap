@@ -3,7 +3,7 @@
 A native macOS screen recorder. Records a screen, a window, or a region, with
 system audio and/or microphone, in HEVC, H.264 or ProRes at native resolution.
 
-Requires macOS 15 or later.
+Requires macOS 15 or later on Apple silicon.
 
 ## Install
 
@@ -21,8 +21,7 @@ permission if you enable the mic). After granting Screen Recording, relaunch.
 ## Build
 
 ```sh
-./build.sh            # builds build/G-Cap.app for this Mac
-UNIVERSAL=1 ./build.sh   # arm64 + x86_64
+./build.sh   # builds build/G-Cap.app
 open build/G-Cap.app
 ```
 
@@ -35,5 +34,5 @@ open build/G-Cap.app
 
 ## Releases
 
-Pushing a tag like `v0.1.0` makes GitHub Actions build a universal app and
+Pushing a tag like `v0.1.0` makes GitHub Actions build the app and
 attach `G-Cap.zip` to a GitHub release.
