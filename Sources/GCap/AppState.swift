@@ -28,6 +28,8 @@ final class AppState: ObservableObject {
     @Published var selectedMicrophoneID: String?
 
     // Video
+    @Published var captureVideo = true
+    @Published var audioOnlyFormat = AudioFormat.aac
     @Published var codec = VideoCodec.hevc
     @Published var quality = Quality.veryHigh
     @Published var fps = 60
@@ -159,6 +161,10 @@ final class AppState: ObservableObject {
         defer { isBusy = false }
         errorMessage = nil
 
+        if !captureVideo && !captureSystemAudio && !captureMicrophone {
+            errorMessage = "Nothing to record: turn on video, system audio, or the microphone."
+            return
+        }
         if captureMicrophone, !(await AVCaptureDevice.requestAccess(for: .audio)) {
             errorMessage = "G-Cap needs Microphone permission. Enable it in System Settings › Privacy & Security › Microphone."
             return
@@ -171,11 +177,15 @@ final class AppState: ObservableObject {
         do {
             let (filter, config, outlineRegion) = try makeFilterAndConfiguration(content: content)
             try FileManager.default.createDirectory(at: outputFolder, withIntermediateDirectories: true)
+            let video = captureVideo
+                ? VideoSettings(width: config.width, height: config.height, fps: fps, codec: codec, quality: quality)
+                : nil
+            // ProRes gets uncompressed audio to match.
+            let audioFormat = captureVideo ? (codec.isProRes ? .pcm : .aac) : audioOnlyFormat
             let recorder = try Recorder(
-                url: nextOutputURL(), width: config.width, height: config.height, fps: fps,
-                codec: codec, quality: quality,
+                url: nextOutputURL(), video: video, audioFormat: audioFormat,
                 systemAudio: config.capturesAudio, microphone: config.captureMicrophone)
-            try await engine.start(filter: filter, configuration: config, recorder: recorder)
+            try await engine.start(filter: filter, configuration: config, captureVideo: captureVideo, recorder: recorder)
             if let outlineRegion { regionOutline.show(outlineRegion) }
             recordingStart = Date()
             isRecording = true
@@ -232,6 +242,10 @@ final class AppState: ObservableObject {
             filter = SCContentFilter(desktopIndependentWindow: window)
             size = filter.contentRect.size
             config.ignoreShadowsSingleWindow = true
+        case .region where !captureVideo:
+            // Audio only: the region doesn't matter, just record that display's apps.
+            filter = try displayFilter(region?.displayID ?? selectedDisplayID)
+            size = filter.contentRect.size
         case .region:
             guard let region else {
                 throw SetupError(errorDescription: "Select a region first.")
@@ -244,9 +258,16 @@ final class AppState: ObservableObject {
 
         // Capture at native pixel resolution. Encoders want even dimensions.
         let scale = CGFloat(filter.pointPixelScale)
-        config.width = Int((size.width * scale).rounded()) & ~1
-        config.height = Int((size.height * scale).rounded()) & ~1
-        config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(fps))
+        if captureVideo {
+            config.width = Int((size.width * scale).rounded()) & ~1
+            config.height = Int((size.height * scale).rounded()) & ~1
+            config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(fps))
+        } else {
+            // ScreenCaptureKit always renders video; keep it as cheap as possible.
+            config.width = 64
+            config.height = 64
+            config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
+        }
         config.queueDepth = 8
         config.pixelFormat = kCVPixelFormatType_32BGRA
         config.colorSpaceName = CGColorSpace.sRGB
@@ -268,10 +289,11 @@ final class AppState: ObservableObject {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
         let base = "G-Cap \(formatter.string(from: Date()))"
-        var url = outputFolder.appendingPathComponent(base).appendingPathExtension("mov")
+        let ext = Recorder.fileExtension(hasVideo: captureVideo)
+        var url = outputFolder.appendingPathComponent(base).appendingPathExtension(ext)
         var n = 2
         while FileManager.default.fileExists(atPath: url.path) {
-            url = outputFolder.appendingPathComponent("\(base) \(n)").appendingPathExtension("mov")
+            url = outputFolder.appendingPathComponent("\(base) \(n)").appendingPathExtension(ext)
             n += 1
         }
         return url

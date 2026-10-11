@@ -62,7 +62,9 @@ struct ContentView: View {
                     }
                 }
             }
-            Toggle("Show cursor", isOn: $state.showsCursor)
+            if state.captureVideo {
+                Toggle("Show cursor", isOn: $state.showsCursor)
+            }
         }
     }
 
@@ -77,6 +79,13 @@ struct ContentView: View {
                     }
                 }
             }
+            if state.captureSystemAudio {
+                Text(state.sourceKind == .window
+                     ? "System audio comes only from the selected window's app."
+                     : "System audio comes from all apps except G-Cap.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             if state.captureSystemAudio && state.captureMicrophone {
                 Text("System audio and microphone are saved as separate audio tracks.")
                     .font(.caption)
@@ -87,22 +96,37 @@ struct ContentView: View {
 
     private var videoSection: some View {
         Section("Video") {
-            Picker("Codec", selection: $state.codec) {
-                ForEach(VideoCodec.allCases) { Text($0.rawValue).tag($0) }
-            }
-            if !state.codec.isProRes {
-                Picker("Quality", selection: $state.quality) {
-                    ForEach(Quality.allCases) { Text($0.rawValue).tag($0) }
+            Toggle("Record video", isOn: $state.captureVideo)
+            if state.captureVideo {
+                videoSettings
+            } else {
+                Picker("Audio format", selection: $state.audioOnlyFormat) {
+                    ForEach(AudioFormat.audioOnlyChoices) { Text($0.rawValue).tag($0) }
                 }
+                Text("Audio only, saved as an .m4a file.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            Picker("Frame rate", selection: $state.fps) {
-                Text("30 fps").tag(30)
-                Text("60 fps").tag(60)
-            }
-            Text(qualityNote)
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
+    }
+
+    @ViewBuilder
+    private var videoSettings: some View {
+        Picker("Codec", selection: $state.codec) {
+            ForEach(VideoCodec.allCases) { Text($0.rawValue).tag($0) }
+        }
+        if !state.codec.isProRes {
+            Picker("Quality", selection: $state.quality) {
+                ForEach(Quality.allCases) { Text($0.rawValue).tag($0) }
+            }
+        }
+        Picker("Frame rate", selection: $state.fps) {
+            Text("30 fps").tag(30)
+            Text("60 fps").tag(60)
+        }
+        Text(qualityNote)
+            .font(.caption)
+            .foregroundStyle(.secondary)
     }
 
     private var qualityNote: String {
@@ -183,7 +207,7 @@ struct ContentView: View {
         switch state.sourceKind {
         case .display: return state.selectedDisplayID != nil
         case .window: return state.selectedWindowID != nil
-        case .region: return state.region != nil
+        case .region: return state.region != nil || !state.captureVideo
         }
     }
 

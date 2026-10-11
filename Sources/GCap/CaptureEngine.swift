@@ -13,9 +13,12 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate {
     /// the user clicks "Stop" in the system's screen sharing menu).
     var onUnexpectedStop: ((Error) -> Void)?
 
-    func start(filter: SCContentFilter, configuration: SCStreamConfiguration, recorder: Recorder) async throws {
+    func start(filter: SCContentFilter, configuration: SCStreamConfiguration, captureVideo: Bool,
+               recorder: Recorder) async throws {
         let stream = SCStream(filter: filter, configuration: configuration, delegate: self)
-        try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
+        if captureVideo {
+            try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
+        }
         if configuration.capturesAudio {
             try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: queue)
         }

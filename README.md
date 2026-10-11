@@ -2,6 +2,7 @@
 
 A native macOS screen recorder. Records a screen, a window, or a region, with
 system audio and/or microphone, in HEVC, H.264 or ProRes at native resolution.
+It can also record audio only.
 
 Requires macOS 15 or later on Apple silicon.
 
@@ -29,6 +30,8 @@ open build/G-Cap.app
 
 - Choose **Screen**, **Window** or **Region** (Region → *Select…* / *Edit…*: drag the middle to move, edges or corners to resize, or drag on empty space to draw a new one; type an exact pixel size, lock an aspect ratio, or pick a preset; arrows nudge, Return or Done accepts, Esc cancels, Record starts right away).
 - Toggle system audio / microphone. When both are on they are saved as separate audio tracks.
+- System audio comes from every app except G-Cap, or, with a **Window** source, only from that window's app.
+- Turn off **Record video** for audio only: an `.m4a` in AAC 256 kbps or Apple Lossless.
 - Click **Record** (or ⇧⌘R). Stop from the window, ⇧⌘R, or the menu bar icon.
 - Recordings go to `~/Movies/G-Cap` by default.
 

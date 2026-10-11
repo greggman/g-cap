@@ -48,60 +48,83 @@ enum RecorderError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .noFrames: "No video frames were captured."
+        case .noFrames: "Nothing was captured."
         case .writer(let e): "Failed to write movie: \(e?.localizedDescription ?? "unknown error")"
         }
     }
 }
 
-/// Writes ScreenCaptureKit sample buffers to a .mov file.
+enum AudioFormat: String, CaseIterable, Identifiable {
+    case aac = "AAC 256 kbps"
+    case appleLossless = "Apple Lossless"
+    case pcm = "24-bit PCM"
+
+    var id: String { rawValue }
+
+    /// The choices offered for audio-only recordings (.m4a can't hold PCM).
+    static let audioOnlyChoices: [AudioFormat] = [.aac, .appleLossless]
+}
+
+struct VideoSettings {
+    var width: Int
+    var height: Int
+    var fps: Int
+    var codec: VideoCodec
+    var quality: Quality
+}
+
+/// Writes ScreenCaptureKit sample buffers to a .mov file, or an .m4a file when there's no video.
 /// Not thread safe: every call must come from the same serial queue.
 final class Recorder {
     enum AudioSource { case system, microphone }
 
     let url: URL
     private let writer: AVAssetWriter
-    private let videoInput: AVAssetWriterInput
+    private let videoInput: AVAssetWriterInput?
     private let systemAudioInput: AVAssetWriterInput?
     private let micInput: AVAssetWriterInput?
     private var sessionStart: CMTime?
     private var lastVideo: CMSampleBuffer?
     private var lastVideoTime = CMTime.invalid
 
-    init(url: URL, width: Int, height: Int, fps: Int, codec: VideoCodec, quality: Quality,
-         systemAudio: Bool, microphone: Bool) throws {
+    static func fileExtension(hasVideo: Bool) -> String { hasVideo ? "mov" : "m4a" }
+
+    init(url: URL, video: VideoSettings?, audioFormat: AudioFormat, systemAudio: Bool, microphone: Bool) throws {
         self.url = url
-        writer = try AVAssetWriter(outputURL: url, fileType: .mov)
+        writer = try AVAssetWriter(outputURL: url, fileType: video == nil ? .m4a : .mov)
 
-        var videoSettings: [String: Any] = [
-            AVVideoCodecKey: codec.avCodec,
-            AVVideoWidthKey: width,
-            AVVideoHeightKey: height,
-            AVVideoColorPropertiesKey: [
-                AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
-                AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
-                AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2,
-            ],
-        ]
-        if !codec.isProRes {
-            var props: [String: Any] = [
-                AVVideoAverageBitRateKey: quality.bitrate(width: width, height: height, fps: fps),
-                AVVideoExpectedSourceFrameRateKey: fps,
-                AVVideoMaxKeyFrameIntervalKey: fps * 2,
+        if let video {
+            var videoSettings: [String: Any] = [
+                AVVideoCodecKey: video.codec.avCodec,
+                AVVideoWidthKey: video.width,
+                AVVideoHeightKey: video.height,
+                AVVideoColorPropertiesKey: [
+                    AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
+                    AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
+                    AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2,
+                ],
             ]
-            if codec == .h264 {
-                props[AVVideoProfileLevelKey] = AVVideoProfileLevelH264HighAutoLevel
+            if !video.codec.isProRes {
+                var props: [String: Any] = [
+                    AVVideoAverageBitRateKey: video.quality.bitrate(width: video.width, height: video.height, fps: video.fps),
+                    AVVideoExpectedSourceFrameRateKey: video.fps,
+                    AVVideoMaxKeyFrameIntervalKey: video.fps * 2,
+                ]
+                if video.codec == .h264 {
+                    props[AVVideoProfileLevelKey] = AVVideoProfileLevelH264HighAutoLevel
+                }
+                videoSettings[AVVideoCompressionPropertiesKey] = props
             }
-            videoSettings[AVVideoCompressionPropertiesKey] = props
+            let input = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+            input.expectsMediaDataInRealTime = true
+            writer.add(input)
+            videoInput = input
+        } else {
+            videoInput = nil
         }
-        videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
-        videoInput.expectsMediaDataInRealTime = true
-        writer.add(videoInput)
 
-        // ProRes gets uncompressed audio to match; otherwise high bitrate AAC.
-        let pcm = codec.isProRes
-        systemAudioInput = systemAudio ? Self.makeAudioInput(channels: 2, pcm: pcm) : nil
-        micInput = microphone ? Self.makeAudioInput(channels: 1, pcm: pcm) : nil
+        systemAudioInput = systemAudio ? Self.makeAudioInput(channels: 2, format: audioFormat) : nil
+        micInput = microphone ? Self.makeAudioInput(channels: 1, format: audioFormat) : nil
         for input in [systemAudioInput, micInput].compactMap({ $0 }) {
             writer.add(input)
         }
@@ -109,7 +132,7 @@ final class Recorder {
         guard writer.startWriting() else { throw RecorderError.writer(writer.error) }
     }
 
-    private static func makeAudioInput(channels: Int, pcm: Bool) -> AVAssetWriterInput {
+    private static func makeAudioInput(channels: Int, format: AudioFormat) -> AVAssetWriterInput {
         var layout = AudioChannelLayout()
         layout.mChannelLayoutTag = channels == 1 ? kAudioChannelLayoutTag_Mono : kAudioChannelLayoutTag_Stereo
         let layoutData = Data(bytes: &layout, count: MemoryLayout<AudioChannelLayout>.size)
@@ -118,13 +141,17 @@ final class Recorder {
             AVNumberOfChannelsKey: channels,
             AVChannelLayoutKey: layoutData,
         ]
-        if pcm {
+        switch format {
+        case .pcm:
             settings[AVFormatIDKey] = kAudioFormatLinearPCM
             settings[AVLinearPCMBitDepthKey] = 24
             settings[AVLinearPCMIsFloatKey] = false
             settings[AVLinearPCMIsBigEndianKey] = false
             settings[AVLinearPCMIsNonInterleaved] = false
-        } else {
+        case .appleLossless:
+            settings[AVFormatIDKey] = kAudioFormatAppleLossless
+            settings[AVEncoderBitDepthHintKey] = 24
+        case .aac:
             settings[AVFormatIDKey] = kAudioFormatMPEG4AAC
             settings[AVEncoderBitRateKey] = channels == 1 ? 128_000 : 256_000
         }
@@ -134,7 +161,7 @@ final class Recorder {
     }
 
     func appendVideo(_ sampleBuffer: CMSampleBuffer) {
-        guard writer.status == .writing else { return }
+        guard writer.status == .writing, let videoInput else { return }
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         if sessionStart == nil {
             writer.startSession(atSourceTime: pts)
@@ -148,8 +175,14 @@ final class Recorder {
     }
 
     func appendAudio(_ sampleBuffer: CMSampleBuffer, from source: AudioSource) {
-        guard writer.status == .writing, let start = sessionStart,
-              CMSampleBufferGetPresentationTimeStamp(sampleBuffer) >= start,
+        guard writer.status == .writing else { return }
+        let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        // With video, the first frame starts the session; without, the first audio does.
+        if videoInput == nil && sessionStart == nil {
+            writer.startSession(atSourceTime: pts)
+            sessionStart = pts
+        }
+        guard let start = sessionStart, pts >= start,
               let input = source == .system ? systemAudioInput : micInput,
               input.isReadyForMoreMediaData else { return }
         input.append(sampleBuffer)
@@ -166,7 +199,7 @@ final class Recorder {
         // ScreenCaptureKit only delivers frames when something changes, so
         // repeat the last frame at "now" to make the video run to the end.
         let now = CMClockGetTime(CMClockGetHostTimeClock())
-        if let last = lastVideo, now > lastVideoTime, videoInput.isReadyForMoreMediaData {
+        if let videoInput, let last = lastVideo, now > lastVideoTime, videoInput.isReadyForMoreMediaData {
             var timing = CMSampleTimingInfo(duration: .invalid, presentationTimeStamp: now, decodeTimeStamp: .invalid)
             var copy: CMSampleBuffer?
             CMSampleBufferCreateCopyWithNewTiming(allocator: nil, sampleBuffer: last, sampleTimingEntryCount: 1,
@@ -177,8 +210,10 @@ final class Recorder {
         }
         lastVideo = nil
 
-        writer.endSession(atSourceTime: lastVideoTime)
-        videoInput.markAsFinished()
+        if videoInput != nil {
+            writer.endSession(atSourceTime: lastVideoTime)
+        }
+        videoInput?.markAsFinished()
         systemAudioInput?.markAsFinished()
         micInput?.markAsFinished()
         writer.finishWriting { [writer, url] in
