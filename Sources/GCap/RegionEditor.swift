@@ -275,6 +275,8 @@ final class RegionEditor {
             window.hasShadow = false
             window.isReleasedWhenClosed = false
             window.acceptsMouseMovedEvents = true
+            // Clicks on fully transparent pixels otherwise fall through to the windows below.
+            window.ignoresMouseEvents = false
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             let view = RegionOverlayView(displayID: displayID, model: model) { [weak self] result in
                 self?.finish(result)
@@ -497,7 +499,9 @@ private final class RegionOverlayView: NSView {
         bounds.fill()
         guard let r = rect else { return }
 
-        NSColor.clear.setFill()
+        // Not fully clear: the window server passes clicks on alpha 0 pixels
+        // through to whatever is underneath, which would make the region undraggable.
+        NSColor.black.withAlphaComponent(0.01).setFill()
         r.fill(using: .copy)
 
         let border = NSBezierPath(rect: r.insetBy(dx: -0.5, dy: -0.5))
