@@ -18,6 +18,9 @@ remove the quarantine flag before the first launch:
 xattr -dr com.apple.quarantine /Applications/G-Cap.app
 ```
 
+Alternatively, try to open it once, then go to System Settings › Privacy &
+Security and click **Open Anyway**.
+
 On first use macOS asks for Screen Recording permission (and Microphone
 permission if you enable the mic). After granting Screen Recording, relaunch.
 

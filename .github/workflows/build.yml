@@ -51,4 +51,5 @@ jobs:
           xattr -dr com.apple.quarantine /path/to/G-Cap.app
           \`\`\`
 
-          or right-click the app and choose Open the first time."
+          Or open it once, then go to System Settings › Privacy & Security and click
+          **Open Anyway**."
