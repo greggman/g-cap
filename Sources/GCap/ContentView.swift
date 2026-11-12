@@ -120,7 +120,12 @@ struct ContentView: View {
                 ForEach(Quality.allCases) { Text($0.rawValue).tag($0) }
             }
         }
+        Picker("Resolution", selection: $state.maxHeight) {
+            Text("Native").tag(0)
+            Text("1080p").tag(1080)
+        }
         Picker("Frame rate", selection: $state.fps) {
+            Text("10 fps").tag(10)
             Text("30 fps").tag(30)
             Text("60 fps").tag(60)
         }
@@ -135,11 +140,15 @@ struct ContentView: View {
         }
         if let display = state.displays.first(where: { $0.displayID == state.selectedDisplayID }) {
             let scale = NSScreen.screens.first(where: { $0.displayID == display.displayID })?.backingScaleFactor ?? 2
-            let w = Int(CGFloat(display.width) * scale), h = Int(CGFloat(display.height) * scale)
+            let px = AppState.fit(width: CGFloat(display.width) * scale, height: CGFloat(display.height) * scale,
+                                  maxHeight: state.maxHeight)
+            let w = Int(px.width.rounded()) & ~1, h = Int(px.height.rounded()) & ~1
             let mbps = Double(state.quality.bitrate(width: w, height: h, fps: state.fps)) / 1_000_000
             return "About \(Int(mbps.rounded())) Mbps for a full \(w) × \(h) screen, with 256 kbps AAC audio."
         }
-        return "Native pixel resolution, with 256 kbps AAC audio."
+        return state.maxHeight > 0
+            ? "Scaled to fit \(state.maxHeight)p, with 256 kbps AAC audio."
+            : "Native pixel resolution, with 256 kbps AAC audio."
     }
 
     private var outputSection: some View {
