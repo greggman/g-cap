@@ -32,7 +32,13 @@ final class AppState: ObservableObject {
     @Published var audioOnlyFormat = AudioFormat.aac
     @Published var codec = VideoCodec.hevc
     @Published var quality = Quality.veryHigh
-    @Published var fps = 60
+    @Published var fps = UserDefaults.standard.object(forKey: "fps") as? Int ?? 60 {
+        didSet { UserDefaults.standard.set(fps, forKey: "fps") }
+    }
+    /// Largest output height (fit inside 16:9 at that height), or 0 for native resolution.
+    @Published var maxHeight = UserDefaults.standard.integer(forKey: "maxHeight") {
+        didSet { UserDefaults.standard.set(maxHeight, forKey: "maxHeight") }
+    }
     @Published var showsCursor = true
 
     // Output
@@ -256,11 +262,12 @@ final class AppState: ObservableObject {
             outline = region
         }
 
-        // Capture at native pixel resolution. Encoders want even dimensions.
+        // Capture at native pixel resolution, or scaled down to fit maxHeight. Encoders want even dimensions.
         let scale = CGFloat(filter.pointPixelScale)
         if captureVideo {
-            config.width = Int((size.width * scale).rounded()) & ~1
-            config.height = Int((size.height * scale).rounded()) & ~1
+            let pixels = Self.fit(width: size.width * scale, height: size.height * scale, maxHeight: maxHeight)
+            config.width = Int(pixels.width.rounded()) & ~1
+            config.height = Int(pixels.height.rounded()) & ~1
             config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(fps))
         } else {
             // ScreenCaptureKit always renders video; keep it as cheap as possible.
@@ -283,6 +290,13 @@ final class AppState: ObservableObject {
             config.microphoneCaptureDeviceID = selectedMicrophoneID
         }
         return (filter, config, outline)
+    }
+
+    static func fit(width: CGFloat, height: CGFloat, maxHeight: Int) -> CGSize {
+        guard maxHeight > 0 else { return CGSize(width: width, height: height) }
+        let box = CGSize(width: CGFloat(maxHeight) * 16 / 9, height: CGFloat(maxHeight))
+        let k = min(1, box.width / width, box.height / height)
+        return CGSize(width: width * k, height: height * k)
     }
 
     private func nextOutputURL() -> URL {
